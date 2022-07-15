@@ -1,0 +1,74 @@
+---
+- name: Install Clickhouse
+  hosts: clickhouse
+  handlers:
+    - name: Start clickhouse service
+      become: true
+      ansible.builtin.service:
+        name: clickhouse-server
+        state: restarted
+  tasks:
+    - block:
+        - name: Get clickhouse distrib
+          ansible.builtin.get_url:
+            url: "https://packages.clickhouse.com/rpm/stable/{{ item }}-{{ clickhouse_version }}.noarch.rpm"
+            dest: "./{{ item }}-{{ clickhouse_version }}.rpm"
+          with_items: "{{ clickhouse_packages }}"
+          tags: clickhouse
+      rescue:
+        - name: Get clickhouse distrib
+          ansible.builtin.get_url:
+            url: "https://packages.clickhouse.com/rpm/stable/clickhouse-common-static-{{ clickhouse_version }}.x86_64.rpm"
+            dest: "./clickhouse-common-static-{{ clickhouse_version }}.rpm"
+          tags: clickhouse
+    - name: Install clickhouse packages
+      become: true
+      ansible.builtin.yum:
+        name:
+          - clickhouse-common-static-{{ clickhouse_version }}.rpm
+          - clickhouse-client-{{ clickhouse_version }}.rpm
+          - clickhouse-server-{{ clickhouse_version }}.rpm
+      notify: Start clickhouse service
+      tags: clickhouse
+    - name: Create database
+      ansible.builtin.command: "clickhouse-client -q 'create database logs;'"
+      register: create_db
+      failed_when: create_db.rc != 0 and create_db.rc !=82
+      changed_when: create_db.rc == 0
+      tags: clickhouse
+- name: Install Vector
+  hosts: vector-01
+  tasks:
+    - name: Get archieve with Vector
+      get_url:
+        url: "https://packages.timber.io/vector/{{ vector_version }}/vector-{{ vector_version }}-x86_64-unknown-linux-gnu.tar.gz"
+        dest: "/tmp/vector-{{ vector_version }}-x86_64-unknown-linux-gnu.tar.gz"
+        mode: 0644
+        timeout: 60
+        force: true
+      register: get_vector
+      until: get_vector is succeeded
+      tags: vector
+    - name: Create directory for Vector
+      become: true
+      file: 
+        state: directory
+        path: "{{ vector_directory }}"
+        mode: 0755
+      tags: vector
+    - name: Unarchive tar.gz with Vector
+      become: true
+      Unarchive:
+        copy: false
+        src: "/tmp/vector-{{ vector_version }}-x86_64-unknown-linux-gnu.tar.gz"
+        dest: "{{ vector_directory }}"
+        extra_opts: [--strip-component=2]
+        creates: "{{ vector_directory }}/bin/vector"
+      tags: vector
+    - name: Config for Vector
+      become: true
+      template:
+        src: "templates/vector.sh.j2"
+        dest: "/etc/profile.d/vector.sh"
+      tags: vector
+
