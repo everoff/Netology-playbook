@@ -55,7 +55,7 @@
         group: "{{ ansible_user_gid }}"
         validate: vector validate --no-environment --config-yaml %s
       tags: vector
-    - name: Create systemd until
+    - name: Create systemd unit
       become: true
       template:
         src: "templates/vector.service.j2"
@@ -81,7 +81,7 @@
       become: true
       command: nginx -s reload
   tasks:
-    - name: Install epel
+    - name: Install epel-release
       become: true
       ansible.builtin.yum:
         name: epel-release
@@ -122,7 +122,7 @@
         name: git
         state: present     
   tasks: 
-    - name: Copy paackage from git 
+    - name: Copy package from git 
       git:
         repo: "{{ lighthouse_url }}"
         version: master
